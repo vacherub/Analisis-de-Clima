@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pronóstico meteorológico para ciudades de Italia
+Pronóstico meteorológico para ciudades de Italia v1.0
 Basado en: datos históricos observados + forecast Open-Meteo + análisis estadístico
 Uso: python forecast.py [--ciudad CIUDAD] [--dias N] [--extendido] [--today]
 """
