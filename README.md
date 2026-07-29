@@ -1,4 +1,4 @@
-# Analisis-de-Clima v1.0
+# Analisis-de-Clima v2.0
 
 Análisis del clima, tiempo y otros parametros utiles para ciudades de Italia.
 
@@ -27,6 +27,7 @@ python forecast.py [--ciudad CIUDAD] [--dias N] [--extendido] [--today]
 | `--extendido` | `-e` | — | Incluye predicción horaria detallada |
 | `--list` | `-l` | — | Lista todas las ciudades disponibles |
 | `--today` | `-t` | — | Muestra datos hora por hora del día actual |
+| `--resumen` | `-r` | — | Muestra solo tabla resumen y resumen ejecutivo |
 
 ### Ejemplos
 
@@ -38,6 +39,8 @@ python forecast.py -t -c NAPOLI           # Hoy Napoli
 python forecast.py -c MILANO -d 10        # Milano 10 días
 python forecast.py -c NAPOLI -e           # Napoli + detalle horario
 python forecast.py -l                     # Listar ciudades
+python forecast.py -r                     # Solo resumen
+python forecast.py -r -c MILANO -d 10     # Resumen Milano 10 días
 ```
 
 ## Fuentes de datos
@@ -70,3 +73,4 @@ El reporte incluye:
 ## History
 
 - **v1.0** — Versión inicial
+- **v2.0** — Nuevo parámetro `--resumen` / `-r` para mostrar solo tabla resumen y resumen ejecutivo

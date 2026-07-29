@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pronóstico meteorológico para ciudades de Italia v1.0
+Pronóstico meteorológico para ciudades de Italia v2.0
 Basado en: datos históricos observados + forecast Open-Meteo + análisis estadístico
 Uso: python forecast.py [--ciudad CIUDAD] [--dias N] [--extendido] [--today]
 """
@@ -601,7 +601,7 @@ def today_report(ciudad_nombre):
     return 0
 
 
-def run(ciudad_nombre, days, show_detail=False):
+def run(ciudad_nombre, days, show_detail=False, resumen=False):
     """Main analysis and forecast generator."""
     ciudad = CIUDADES[ciudad_nombre]
     t_mean_norm = ciudad["t_mean"]
@@ -641,41 +641,42 @@ def run(ciudad_nombre, days, show_detail=False):
     # =====================================================================
     # SECTION 1: Historical observed data
     # =====================================================================
-    print_header("1. DATOS OBSERVADOS")
+    if not resumen:
+        print_header("1. DATOS OBSERVADOS")
 
-    if hist["n_days"] > 0:
-        print(f"\n  Días con datos: {hist['n_days']}")
-        print(f"  Temperatura media observada: {hist['mean_obs']:.1f}°C")
-        print(f"  Temperatura normal climática: {hist['mean_normal']:.1f}°C")
-        print(f"  Anomalía térmica: {hist['mean_anomaly']:+.1f}°C")
-        print(f"  Precipitación total acumulada: {hist['total_precip']:.1f} mm")
-        print()
-        print(f"  Tendencia reciente: {hist['trend']}")
-        print(f"  Rachas secas consecutivas: {hist['dry_streak']} día(s)")
-        if hist["heatwave"]:
-            print(f"  ⚠ OLA DE CALOR ACTIVA: {hist['dry_streak']} días secos + anomalía >+3°C")
+        if hist["n_days"] > 0:
+            print(f"\n  Días con datos: {hist['n_days']}")
+            print(f"  Temperatura media observada: {hist['mean_obs']:.1f}°C")
+            print(f"  Temperatura normal climática: {hist['mean_normal']:.1f}°C")
+            print(f"  Anomalía térmica: {hist['mean_anomaly']:+.1f}°C")
+            print(f"  Precipitación total acumulada: {hist['total_precip']:.1f} mm")
+            print()
+            print(f"  Tendencia reciente: {hist['trend']}")
+            print(f"  Rachas secas consecutivas: {hist['dry_streak']} día(s)")
+            if hist["heatwave"]:
+                print(f"  ⚠ OLA DE CALOR ACTIVA: {hist['dry_streak']} días secos + anomalía >+3°C")
 
-        print()
-        print(f"  {'Fecha':<14} {'T.Min':>7} {'T.Max':>7} {'T.Media':>8} {'Precip':>7} {'Desvío':>7}")
-        print(f"  {'-'*14} {'-'*7} {'-'*7} {'-'*8} {'-'*7} {'-'*7}")
+            print()
+            print(f"  {'Fecha':<14} {'T.Min':>7} {'T.Max':>7} {'T.Media':>8} {'Precip':>7} {'Desvío':>7}")
+            print(f"  {'-'*14} {'-'*7} {'-'*7} {'-'*8} {'-'*7} {'-'*7}")
 
-    daily = raw.get("daily", {})
-    for i, d in enumerate(daily.get("time", [])):
-        dt = datetime.date.fromisoformat(d)
-        if dt >= datetime.date.today():
-            break
-        tm = daily["temperature_2m_min"][i]
-        tx = daily["temperature_2m_max"][i]
-        pp = daily["precipitation_sum"][i] if daily["precipitation_sum"][i] else 0
-        tmean = (tm + tx) / 2 if tm and tx else 0
-        anomaly = tmean - t_mean_norm
-        print(f"  {d:<14} {tm if tm else 'N/A':>7} {tx if tx else 'N/A':>7} "
-              f"{tmean:>7.1f}°C  {pp if pp else 0:>6.1f}mm {anomaly:>+6.1f}°C")
+        daily = raw.get("daily", {})
+        for i, d in enumerate(daily.get("time", [])):
+            dt = datetime.date.fromisoformat(d)
+            if dt >= datetime.date.today():
+                break
+            tm = daily["temperature_2m_min"][i]
+            tx = daily["temperature_2m_max"][i]
+            pp = daily["precipitation_sum"][i] if daily["precipitation_sum"][i] else 0
+            tmean = (tm + tx) / 2 if tm and tx else 0
+            anomaly = tmean - t_mean_norm
+            print(f"  {d:<14} {tm if tm else 'N/A':>7} {tx if tx else 'N/A':>7} "
+                  f"{tmean:>7.1f}°C  {pp if pp else 0:>6.1f}mm {anomaly:>+6.1f}°C")
 
     # =====================================================================
     # SECTION 2: Summary table
     # =====================================================================
-    print_header("2. TABLA RESUMEN - PRÓXIMOS DÍAS")
+    print_header(f"{'1' if resumen else '2'}. TABLA RESUMEN - PRÓXIMOS DÍAS")
 
     print(f"  {'Día':<14} {'T.Min (h)':<14} {'T.Max (h)':<14} "
           f"{'H.min (h)':<14} {'H.max (h)':<14} {'Lluvia':>8} {'Condición':<30}")
@@ -702,71 +703,73 @@ def run(ciudad_nombre, days, show_detail=False):
     # =====================================================================
     # SECTION 3: Anomaly analysis
     # =====================================================================
-    print_header("3. ANÁLISIS DE ANOMALÍAS Y TENDENCIA")
+    if not resumen:
+        print_header("3. ANÁLISIS DE ANOMALÍAS Y TENDENCIA")
 
-    if hist["n_days"] > 0:
-        print(f"\n  Temperatura media observada (histórico): {hist['mean_obs']:.1f}°C")
-        print(f"  Temperatura normal climática (julio):   {hist['mean_normal']:.1f}°C")
-        print(f"  Anomalía:                              {hist['mean_anomaly']:+.1f}°C")
+        if hist["n_days"] > 0:
+            print(f"\n  Temperatura media observada (histórico): {hist['mean_obs']:.1f}°C")
+            print(f"  Temperatura normal climática (julio):   {hist['mean_normal']:.1f}°C")
+            print(f"  Anomalía:                              {hist['mean_anomaly']:+.1f}°C")
 
-        if hist["heatwave"]:
-            print(f"\n  ⚠ OLA DE CALOR ACTIVA: {hist['dry_streak']} días sin precipitación")
-            print(f"     con anomalía sostenida >+3°C sobre la normal histórica")
-        else:
-            print(f"\n  Sin condiciones de ola de calor detectadas.")
+            if hist["heatwave"]:
+                print(f"\n  ⚠ OLA DE CALOR ACTIVA: {hist['dry_streak']} días sin precipitación")
+                print(f"     con anomalía sostenida >+3°C sobre la normal histórica")
+            else:
+                print(f"\n  Sin condiciones de ola de calor detectadas.")
 
-        trend_labels = {
-            "rapid_warming": "CALENTAMIENTO RÁPIDO (>1.5°C/3días)",
-            "warming": "CALENTAMIENTO MODERADO",
-            "cooling": "ENFRIAMIENTO",
-            "rapid_cooling": "ENFRIAMIENTO RÁPIDO",
-            "stable": "ESTABLE",
-        }
-        print(f"  Tendencia: {trend_labels.get(hist['trend'], hist['trend'])}")
+            trend_labels = {
+                "rapid_warming": "CALENTAMIENTO RÁPIDO (>1.5°C/3días)",
+                "warming": "CALENTAMIENTO MODERADO",
+                "cooling": "ENFRIAMIENTO",
+                "rapid_cooling": "ENFRIAMIENTO RÁPIDO",
+                "stable": "ESTABLE",
+            }
+            print(f"  Tendencia: {trend_labels.get(hist['trend'], hist['trend'])}")
 
-    print(f"\n  Anomalías proyectadas por día (normal julio: {t_mean_norm}°C):")
-    print(f"  {'Día':<14} {'T.Media':>9} {'Normal':>8} {'Anomalía':>9} {'Lluvia':>8}")
-    print(f"  {'-'*14} {'-'*9} {'-'*8} {'-'*9} {'-'*8}")
-    for fd, ds in daily_stats:
-        dt = datetime.date.fromisoformat(fd["date"])
-        label = f"{dow_map.get(fd['dow'], fd['dow'][:3])} {dt.day}"
-        anomaly = ds["t_mean"] - t_mean_norm
-        print(f"  {label:<14} {ds['t_mean']:>7.1f}°C  {t_mean_norm:>6.1f}°C  "
-              f"{anomaly:>+7.1f}°C  {fd['precip_sum']:>6.1f}mm")
+        print(f"\n  Anomalías proyectadas por día (normal julio: {t_mean_norm}°C):")
+        print(f"  {'Día':<14} {'T.Media':>9} {'Normal':>8} {'Anomalía':>9} {'Lluvia':>8}")
+        print(f"  {'-'*14} {'-'*9} {'-'*8} {'-'*9} {'-'*8}")
+        for fd, ds in daily_stats:
+            dt = datetime.date.fromisoformat(fd["date"])
+            label = f"{dow_map.get(fd['dow'], fd['dow'][:3])} {dt.day}"
+            anomaly = ds["t_mean"] - t_mean_norm
+            print(f"  {label:<14} {ds['t_mean']:>7.1f}°C  {t_mean_norm:>6.1f}°C  "
+                  f"{anomaly:>+7.1f}°C  {fd['precip_sum']:>6.1f}mm")
 
     # =====================================================================
     # SECTION 4: Mosquito risk index
     # =====================================================================
-    print_header("4. ÍNDICE DE RIESGO DE ZANCUDOS")
-
     mr = compute_mosquito_risk(forecast_dates, daily_stats, hist)
 
-    level_labels = {"ALTO": "🔴 ALTO", "MEDIO": "🟡 MEDIO", "BAJO": "🟢 BAJO", "MUY BAJO": "⚪ MUY BAJO"}
-    print(f"\n  Riesgo promedio período: {mr['avg_risk']:.1f}/10  ({level_labels.get(mosquito_level(mr['avg_risk']), '?')})")
-    print(f"  Tendencia: {mr['trend']}")
-    print(f"  Pico de riesgo: día {mr['peak_day'] + 1} ({mr['peak_risk']:.1f}/10)")
+    if not resumen:
+        print_header("4. ÍNDICE DE RIESGO DE ZANCUDOS")
 
-    print(f"\n  {'Día':<14} {'Riesgo':>8} {'Nivel':<14} {'T.Media':>8} {'H.Media':>8} {'Lluvia':>8}")
-    print(f"  {'-'*14} {'-'*8} {'-'*14} {'-'*8} {'-'*8} {'-'*8}")
-    for i, (fd, ds) in enumerate(daily_stats):
-        risk = mr["daily_risks"][i]
-        dt = datetime.date.fromisoformat(fd["date"])
-        label = f"{dow_map.get(fd['dow'], fd['dow'][:3])} {dt.day}"
-        h_mean = (ds["h_min"] + ds["h_max"]) / 2
-        print(f"  {label:<14} {risk:>5.1f}/10  {level_labels.get(mosquito_level(risk), '?'):<14} "
-              f"{ds['t_mean']:>6.1f}°C  {h_mean:>5.0f}%  {fd['precip_sum']:>5.1f}mm")
+        level_labels = {"ALTO": "🔴 ALTO", "MEDIO": "🟡 MEDIO", "BAJO": "🟢 BAJO", "MUY BAJO": "⚪ MUY BAJO"}
+        print(f"\n  Riesgo promedio período: {mr['avg_risk']:.1f}/10  ({level_labels.get(mosquito_level(mr['avg_risk']), '?')})")
+        print(f"  Tendencia: {mr['trend']}")
+        print(f"  Pico de riesgo: día {mr['peak_day'] + 1} ({mr['peak_risk']:.1f}/10)")
 
-    trend_icons = {"aumentando": "⬆", "disminuyendo": "⬇", "estable": "➡"}
-    print(f"\n  {trend_icons.get(mr['trend'], '➡')} Tendencia: {mr['trend'].upper()}")
-    print(f"  🦟 Riesgo basado en: temperatura (45%), humedad (35%), precipitación (20%)")
-    print(f"  ℹ Ciclo óptimo: T 25-30°C, humedad >70%, agua estancada post-lluvia")
+        print(f"\n  {'Día':<14} {'Riesgo':>8} {'Nivel':<14} {'T.Media':>8} {'H.Media':>8} {'Lluvia':>8}")
+        print(f"  {'-'*14} {'-'*8} {'-'*14} {'-'*8} {'-'*8} {'-'*8}")
+        for i, (fd, ds) in enumerate(daily_stats):
+            risk = mr["daily_risks"][i]
+            dt = datetime.date.fromisoformat(fd["date"])
+            label = f"{dow_map.get(fd['dow'], fd['dow'][:3])} {dt.day}"
+            h_mean = (ds["h_min"] + ds["h_max"]) / 2
+            print(f"  {label:<14} {risk:>5.1f}/10  {level_labels.get(mosquito_level(risk), '?'):<14} "
+                  f"{ds['t_mean']:>6.1f}°C  {h_mean:>5.0f}%  {fd['precip_sum']:>5.1f}mm")
+
+        trend_icons = {"aumentando": "⬆", "disminuyendo": "⬇", "estable": "➡"}
+        print(f"\n  {trend_icons.get(mr['trend'], '➡')} Tendencia: {mr['trend'].upper()}")
+        print(f"  🦟 Riesgo basado en: temperatura (45%), humedad (35%), precipitación (20%)")
+        print(f"  ℹ Ciclo óptimo: T 25-30°C, humedad >70%, agua estancada post-lluvia")
 
     # =====================================================================
     # SECTION 5: Storm risk analysis
     # =====================================================================
     sr = analyze_convective_risk(hourly_data, forecast_dates)
 
-    if sr["has_any_storm"]:
+    if sr["has_any_storm"] and not resumen:
         print_header("5. ANÁLISIS DE TORMENTAS CONVECTIVAS")
 
         storm_icons = {"moderada": "⛈", "fuerte": "⛈", "severa": "🌪", "leve": "⛈"}
@@ -790,7 +793,7 @@ def run(ciudad_nombre, days, show_detail=False):
     # =====================================================================
     # SECTION 6: Executive summary
     # =====================================================================
-    print_header("6. RESUMEN EJECUTIVO")
+    print_header(f"{'2' if resumen else '6'}. RESUMEN EJECUTIVO")
 
     total_precip_proj = sum(fd["precip_sum"] for fd in forecast_dates)
     mean_temps = [ds["t_mean"] for _, ds in daily_stats]
@@ -909,7 +912,9 @@ Ejemplos:
   python forecast.py -t -c NAPOLI                # hoy Napoli
   python forecast.py -c MILANO -d 10             # Milano 10 días
   python forecast.py -c NAPOLI -e               # Napoli + detalle horario
-  python forecast.py -l                           # listar ciudades
+   python forecast.py -l                           # listar ciudades
+   python forecast.py -r                           # solo resumen
+   python forecast.py -r -c MILANO -d 10          # resumen Milano 10 días
         """,
     )
     parser.add_argument("--ciudad", "-c", type=str, default=CIUDAD_DEFAULT,
@@ -919,6 +924,7 @@ Ejemplos:
     parser.add_argument("--extendido", "-e", action="store_true", help="Incluir predicción horaria detallada")
     parser.add_argument("--list", "-l", action="store_true", help="Listar todas las ciudades disponibles y salir")
     parser.add_argument("--today", "-t", action="store_true", help="Mostrar datos de hoy (temperatura, presión, estado, tendencia)")
+    parser.add_argument("--resumen", "-r", action="store_true", help="Mostrar solo tabla resumen y resumen ejecutivo")
     args = parser.parse_args()
 
     if args.list:
@@ -933,7 +939,7 @@ Ejemplos:
         print("ERROR: dias debe estar entre 1 y 16 (límite Open-Meteo gratuito)")
         sys.exit(1)
 
-    ret = run(args.ciudad.upper(), args.dias, show_detail=args.extendido)
+    ret = run(args.ciudad.upper(), args.dias, show_detail=args.extendido, resumen=args.resumen)
     sys.exit(ret)
 
 
