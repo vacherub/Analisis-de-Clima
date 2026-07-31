@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pronóstico meteorológico para ciudades de Italia v2.0
+Pronóstico meteorológico para ciudades de Italia v2.1
 Basado en: datos históricos observados + forecast Open-Meteo + análisis estadístico
 Uso: python forecast.py [--ciudad CIUDAD] [--dias N] [--extendido] [--today]
 """
@@ -15,10 +15,10 @@ from collections import Counter
 
 # Todas las capitales de región de Italia + coordenadas + normales climáticas julio (1991-2020)
 CIUDADES = {
+    "ANCONA":    {"lat": 43.62, "lon": 13.52, "alt": 16,  "region": "Marche",               "t_mean": 24.0, "precip": 30},
     "AOSTA":     {"lat": 45.74, "lon": 7.32,  "alt": 583, "region": "Valle d'Aosta",        "t_mean": 21.0, "precip": 45},
     "AQUILA":    {"lat": 42.35, "lon": 13.40, "alt": 714, "region": "Abruzzo",              "t_mean": 21.5, "precip": 35},
     "BARI":      {"lat": 41.12, "lon": 16.87, "alt": 5,   "region": "Puglia",               "t_mean": 26.5, "precip": 20},
-    "BERGAMO":   {"lat": 45.70, "lon": 9.67,  "alt": 249, "region": "Lombardia",            "t_mean": 23.5, "precip": 75},
     "BOLOGNA":   {"lat": 44.49, "lon": 11.34, "alt": 54,  "region": "Emilia-Romagna",       "t_mean": 25.0, "precip": 40},
     "CAGLIARI":  {"lat": 39.22, "lon": 9.12,  "alt": 4,   "region": "Sardegna",             "t_mean": 26.5, "precip": 3},
     "CAMPOBASSO":{"lat": 41.56, "lon": 14.66, "alt": 701, "region": "Molise",               "t_mean": 22.5, "precip": 30},
@@ -127,6 +127,12 @@ def condition_icon(cond):
 
 def ciudad_display_name(key):
     return NOMBRES_VISIBLES.get(key, key.capitalize())
+
+
+def ciudad_label(key):
+    """Return city name with its region in parentheses."""
+    c = CIUDADES[key]
+    return f"{ciudad_display_name(key)} ({c['region']})"
 
 
 def list_ciudades():
@@ -494,7 +500,7 @@ def today_report(ciudad_nombre):
     dow = dow_map.get(datetime.date.today().strftime("%A"), "??")
 
     print()
-    print(f"  ── {ciudad_display_name(ciudad_nombre)}, {dow} {datetime.date.today().day} {datetime.date.today().strftime('%b %Y')} ──")
+    print(f"  ── {ciudad_label(ciudad_nombre)}, {dow} {datetime.date.today().day} {datetime.date.today().strftime('%b %Y')} ──")
     print()
     print(f"  {'Hora':>6}  {'Temp':>7}  {'Presión':>8}  {'Humedad':>7}  {'Lluvia':>7}  {'Estado':<25}")
     print(f"  {'─'*6}  {'─'*7}  {'─'*8}  {'─'*7}  {'─'*7}  {'─'*25}")
@@ -616,7 +622,7 @@ def run(ciudad_nombre, days, show_detail=False, resumen=False):
         "Thursday": "JUE", "Friday": "VIE", "Saturday": "SÁB", "Sunday": "DOM"
     }
 
-    print_header(f"PRONÓSTICO METEOROLÓGICO - {ciudad_display_name(ciudad_nombre)}")
+    print_header(f"PRONÓSTICO METEOROLÓGICO - {ciudad_label(ciudad_nombre)}")
     print(f"  Coordenadas: {ciudad['lat']:.2f}°{ 'N' if ciudad['lat']>0 else 'S' }, "
           f"{ciudad['lon']:.2f}°{ 'E' if ciudad['lon']>0 else 'O' } | "
           f"Altitud: {ciudad['alt']}m")
@@ -803,7 +809,7 @@ def run(ciudad_nombre, days, show_detail=False, resumen=False):
     min_temps = [ds["t_min"] for _, ds in daily_stats]
     overall_min = min(min_temps) if min_temps else 0
 
-    print(f"\n  Ciudad: {ciudad_nombre} ({ciudad['lat']:.2f}°N, {ciudad['lon']:.2f}°E, {ciudad['alt']}m snm)")
+    print(f"\n  Ciudad: {ciudad_label(ciudad_nombre)} ({ciudad['lat']:.2f}°N, {ciudad['lon']:.2f}°E, {ciudad['alt']}m snm)")
     print(f"  Período: {days} día(s) | Generado: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} CEST")
     print(f"  Fuentes: Open-Meteo (DWD/MeteoFrance/MetOffice), datos observados, normales climáticas")
     print(f"  Método: Integración multi-modelo + análisis estadístico de anomalías")

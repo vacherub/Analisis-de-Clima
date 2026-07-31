@@ -1,0 +1,4 @@
+*.o
+forecast
+forecast.exe
+bin/

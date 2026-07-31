@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+forecast
+forecast.exe
+forecast_linux
+forecast_macos
+c/*.o
+c/forecast
+c/forecast.exe
+c/bin/
