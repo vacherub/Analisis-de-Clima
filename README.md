@@ -1,6 +1,6 @@
 # Analisis-de-Clima v2.1
 
-Análisis del clima, tiempo y otros parametros utiles para las capitales regionales de Italia. Disponible en **Python** (`forecast.py`) y **C** (`c/forecast.c`, compilable en Windows, Linux y macOS).
+Análisis del clima, tiempo y otros parametros utiles para las capitales regionales de Italia. Disponible en **Python** (`forecast.py`), **C** (`c/forecast.c`, compilable en Windows, Linux y macOS) y como **app gráfica nativa para macOS** (`app-macos/`).
 
 ## Descripción
 
@@ -44,6 +44,22 @@ Hay binarios listos para ejecutar en `c/bin/` (compilados desde `c/forecast.c`):
 ```
 
 Solo requieren libcurl en Linux (normalmente ya instalado); en macOS y Windows usan librerías del sistema, sin dependencias externas. Los binarios no se suben al repositorio; se generan con `make` (ver Compilación).
+
+### App gráfica para macOS
+
+Hay una app nativa (SwiftUI) en `app-macos/` que permite seleccionar la ciudad de una lista, elegir los días (1-16) y ver el pronóstico en una ventana, sin usar terminal.
+
+**Requisito:** Xcode Command Line Tools (`xcode-select --install`) — no necesitas Xcode completo.
+
+```bash
+cd app-macos
+./build.sh          # compila "Analisis de Clima.app" (universal arm64+x86_64) en dist/
+./build.sh --open   # compila y la abre
+```
+
+Para ejecutar después: `open "dist/Analisis de Clima.app"`.
+
+> Nota: al ser una app nativa de macOS (SwiftUI), no funciona en Windows/Linux; usa la versión Python o C para eso.
 
 ### Compilación (C)
 
@@ -111,15 +127,23 @@ Analisis-de-Clima/
 ├── README.md              # Documentación
 ├── forecast.py            # Versión en Python
 ├── .gitignore
-└── c/                     # Versión en C (multiplataforma)
-    ├── forecast.c         # Código principal
-    ├── cJSON.c            # Parser JSON (incluido)
-    ├── cJSON.h
-    ├── Makefile           # Detección automática de plataforma
-    ├── bin/               # Binarios precompilados (no versionados)
-    │   ├── forecast_linux
-    │   ├── forecast_macos
-    │   └── forecast.exe
+├── c/                     # Versión en C (multiplataforma)
+│   ├── forecast.c         # Código principal
+│   ├── cJSON.c            # Parser JSON (incluido)
+│   ├── cJSON.h
+│   ├── Makefile           # Detección automática de plataforma
+│   ├── bin/               # Binarios precompilados (no versionados)
+│   │   ├── forecast_linux
+│   │   ├── forecast_macos
+│   │   └── forecast.exe
+│   └── .gitignore
+└── app-macos/             # App gráfica nativa macOS (SwiftUI)
+    ├── build.sh           # Compila "Analisis de Clima.app" en dist/
+    ├── Sources/           # Código Swift
+    │   ├── AnalisisDeClimaApp.swift
+    │   ├── ContentView.swift    # Interfaz
+    │   ├── Cities.swift         # Las 20 capitales regionales
+    │   └── WeatherClient.swift  # Cliente Open-Meteo
     └── .gitignore
 ```
 
@@ -154,4 +178,4 @@ El reporte incluye:
 
 - **v1.0** — Versión inicial
 - **v2.0** — Nuevo parámetro `--resumen` / `-r` para mostrar solo tabla resumen y resumen ejecutivo (renumerados 1 y 2); eliminada BERGAMO y agregada ANCONA (las 20 capitales regionales); la ciudad se muestra con su región entre paréntesis; versión en C multiplataforma (`c/forecast.c` con libcurl/WinHTTP + cJSON); binarios precompilados para Linux, macOS y Windows en `c/bin/`
-- **v2.1** — Corregido `--dias` en la versión C (ahora muestra hasta 16 días, antes solo 9); binarios reconstruidos y reorganizados en `c/bin/`; limpieza de artefactos de build; `.gitignore` para código fuente y binarios
+- **v2.1** — Corregido `--dias` en la versión C (ahora muestra hasta 16 días, antes solo 9); binarios reconstruidos y reorganizados en `c/bin/`; limpieza de artefactos de build; `.gitignore` para código fuente y binarios; nueva **app gráfica nativa para macOS** (`app-macos/`, SwiftUI) con selector de ciudad, días (1-16) y pronóstico en ventana
