@@ -1,10 +1,12 @@
-__pycache__/
-*.pyc
+# Binarios compilados
 forecast
 forecast.exe
 forecast_linux
 forecast_macos
-c/*.o
-c/forecast
-c/forecast.exe
-c/bin/
+
+# Objetos
+*.o
+
+# Python (eliminado)
+__pycache__/
+*.pyc
