@@ -1,9 +1,13 @@
 /*
- * Pronóstico meteorológico para ciudades de Italia v2.1 (C)
+ * Pronóstico meteorológico para ciudades de Italia v2.2 (C)
  * Basado en: datos históricos observados + forecast Open-Meteo + análisis estadístico
  * Compila en Windows, Linux y macOS.
  *
  * Requiere: libcurl (Linux/macOS) o WinHTTP integrado (Windows) + cJSON (incluido).
+ *
+ * Salida con tipografía de ancho fijo: en Linux/macOS la usa la que elija el
+ * emulador de terminal (Menlo, DejaVu Sans Mono...); en Windows se fuerza una
+ * fuente monoespaciada del sistema (Cascadia Mono / Consolas).
  *
  * Uso: forecast [-c CIUDAD] [-d DIAS] [-e] [-l] [-t] [-r] [-v]
  *
@@ -25,6 +29,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <wincon.h>
 #include <winhttp.h>
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp
@@ -36,10 +41,10 @@
 #define MAX_DAYS      16
 #define HIST_DAYS     7
 #define URL_LEN       1200
-#define MAX_CITIES    64
+#define MAX_CITIES    160
 #define CONFIG_FILE   "clima.conf"
 #define CONF_LINE     160
-#define VERSIONA      "2.1"
+#define VERSIONA      "2.2"
 
 /* ------------------------------------------------------------------ */
 /* Metadatos de las 20 capitales (nombre visible, región, altitud,     */
@@ -84,14 +89,15 @@ static const MetaCiudad METADATA[] = {
 /* Ciudades cargadas desde clima.conf */
 typedef struct {
     char key[64];
-    const char *name;      /* = key si no hay metadata               */
-    const char *region;
+    char region_s[64];   /* región leída de clima.conf (o vacío)      */
+    const char *name;    /* = key si no hay metadata                  */
+    const char *region;  /* apunta a region_s o a METADATA            */
     double lat;
     double lon;
     int    alt;
     double t_mean;
     int    precip;
-    int    es_default;     /* 1 si la línea del config está sin '#'   */
+    int    es_default;   /* 1 si la línea del config está sin '#'     */
 } Ciudad;
 
 static Ciudad  g_cities[MAX_CITIES];
@@ -370,10 +376,11 @@ static const MetaCiudad *find_meta(const char *key) {
 }
 
 /* Carga las ciudades desde clima.conf. Formato por línea:
- *   [ #]  NOMBRE;lat,lon
+ *   [ #]  NOMBRE;lat,lon[;REGION]
  * La línea SIN '#' (sin comentar) es la ciudad por defecto (es_default=1).
  * Si NOMBRE coincide con una capital conocida, se completa nombre,
- * región, altitud y normales; si no, se usan solo las coordenadas.
+ * altitud y normales; si no, se usan solo las coordenadas y la región
+ * (si se indica) del propio archivo.
  * Devuelve la clave por defecto (o NULL). */
 static const char *cargar_config(void) {
     const char *path = config_path();
@@ -389,7 +396,7 @@ static const char *cargar_config(void) {
     if (!f) return NULL;
 
     while (fgets(buf, sizeof(buf), f) && i < MAX_CITIES) {
-        char *s = buf, *semi, *coord;
+        char *s = buf, *semi, *coord, *reg = NULL;
         double lat = 0, lon = 0;
         int es_def = 1;
 
@@ -402,10 +409,14 @@ static const char *cargar_config(void) {
         if (semi) {
             *semi = '\0';
             coord = semi + 1;
+            reg = strchr(coord, ';');
+            if (reg) *reg = '\0';
             while (*coord == ' ' || *coord == '\t') coord++;
             lat = atof(coord);
-            while (*coord && *coord != ';' && *coord != ',' &&
+            while (*coord && *coord != ',' &&
                    *coord != ' ' && *coord != '\t') coord++;
+            if (*coord == ',') coord++;
+            while (*coord == ' ' || *coord == '\t') coord++;
             lon = atof(coord);
         }
         /* sin ';' -> solo el nombre, coords las tomará de la metadata */
@@ -426,11 +437,11 @@ static const char *cargar_config(void) {
         const MetaCiudad *m = find_meta(s);
 
         /* Se acepta si coincide con una capital conocida (con o sin coords),
-         * o si el nombre es una única palabra con coordenadas válidas
-         * (>0). Así se descartan ejemplos de cabecera con espacios. */
+         * o si el nombre trae coordenadas válidas (>0). Se descartan líneas
+         * de texto de cabecera (que llevan ':' como "por ejemplo: ..."). */
         if (!m) {
             if (lat == 0 && lon == 0) continue;
-            if (strchr(s, ' ')) continue;      /* "p. ej. BOLZANO": texto */
+            if (strchr(s, ':')) continue;          /* "por ejemplo: ..." */
         }
 
         snprintf(g_cities[i].key, sizeof(g_cities[i].key), "%s", s);
@@ -441,14 +452,27 @@ static const char *cargar_config(void) {
         g_cities[i].t_mean  = 0;
         g_cities[i].precip  = 0;
         g_cities[i].name    = g_cities[i].key;
-        g_cities[i].region  = "";
+        g_cities[i].region_s[0] = '\0';
+        g_cities[i].region  = g_cities[i].region_s;
+
+        if (reg) {
+            char *r = reg + 1;
+            while (*r == ' ' || *r == '\t') r++;
+            size_t rlen = strlen(r);
+            while (rlen > 0 && (r[rlen-1] == '\n' || r[rlen-1] == '\r' ||
+                                r[rlen-1] == ' ' || r[rlen-1] == '\t'))
+                r[--rlen] = '\0';
+            if (r[0])
+                snprintf(g_cities[i].region_s, sizeof(g_cities[i].region_s), "%s", r);
+        }
 
         if (m) {
             g_cities[i].name   = m->name;
-            g_cities[i].region = m->region ? m->region : "";
             g_cities[i].alt    = m->alt;
             g_cities[i].t_mean = m->t_mean;
             g_cities[i].precip = m->precip;
+            if (!g_cities[i].region_s[0] && m->region)
+                snprintf(g_cities[i].region_s, sizeof(g_cities[i].region_s), "%s", m->region);
         }
 
         if (es_def && !defecto) defecto = g_cities[i].key;
@@ -479,9 +503,18 @@ static const char *cargar_fallback(void) {
     return "TORINO";
 }
 
-/* "Torino (Piemonte)" */
+/* "Torino (Piemonte, 45.07°N, 7.69°E)" — ciudad, región y coordenadas juntas */
 static void ciudad_label(const Ciudad *c, char *buf, size_t n) {
-    snprintf(buf, n, "%s (%s)", c->name, c->region);
+    if (c->region && c->region[0])
+        snprintf(buf, n, "%s (%s, %.2f°%c, %.2f°%c)",
+                 c->name, c->region,
+                 fabs(c->lat), c->lat > 0 ? 'N' : 'S',
+                 fabs(c->lon), c->lon > 0 ? 'E' : 'O');
+    else
+        snprintf(buf, n, "%s (%.2f°%c, %.2f°%c)",
+                 c->name,
+                 fabs(c->lat), c->lat > 0 ? 'N' : 'S',
+                 fabs(c->lon), c->lon > 0 ? 'E' : 'O');
 }
 
 /* ------------------------------------------------------------------ */
@@ -705,7 +738,7 @@ for (i = 0; i < g_n_cities; i++) {
                c->es_default ? "<- por defecto" : "");
     }
     printf("\n  Usar: --ciudad CIUDAD (ej: --ciudad ROMA, --ciudad FIRENZE)\n");
-    printf("  Las ciudades se leen de %s. Añade nuevas con 'NOMBRE;lat,lon'.\n\n", CONFIG_FILE);
+    printf("  Las ciudades se leen de %s. Añade nuevas con 'NOMBRE;lat,lon;REGION'.\n\n", CONFIG_FILE);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1313,10 +1346,6 @@ static void run(const Ciudad *c, int days, int show_detail, int resumen) {
         printf("\n");
     }
 
-    printf("  Coordenadas: %.2f°%c, %.2f°%c | Altitud: %dm\n",
-           fabs(c->lat), c->lat > 0 ? 'N' : 'S',
-           fabs(c->lon), c->lon > 0 ? 'E' : 'O', c->alt);
-
     {
         time_t tt = time(NULL);
         struct tm *tm = localtime(&tt);
@@ -1324,8 +1353,8 @@ static void run(const Ciudad *c, int days, int show_detail, int resumen) {
                tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
                tm->tm_hour, tm->tm_min);
     }
-    printf("  Período: %d día(s) | Normal julio: %.1f°C / %dmm\n",
-           days, c->t_mean, c->precip);
+    printf("  Período: %d día(s) | Altitud: %dm | Normal julio: %.1f°C / %dmm\n",
+           days, c->alt, c->t_mean, c->precip);
     printf("\n");
 
     raw = fetch_openmeteo(c, days, HIST_DAYS);
@@ -1601,9 +1630,8 @@ static void run(const Ciudad *c, int days, int show_detail, int resumen) {
                 }
                 if (g_n_stats > 0) mean_forecast_temp /= g_n_stats;
 
-                printf("\n  Ciudad: %s (%.2f°%c, %.2f°%c, %dm snm)\n",
-                       label, fabs(c->lat), c->lat > 0 ? 'N' : 'S',
-                       fabs(c->lon), c->lon > 0 ? 'E' : 'O', c->alt);
+                printf("\n  Ciudad: %s | Altitud: %dm snm\n",
+                       label, c->alt);
                 printf("  Período: %d día(s) | Generado: ", days);
                 {
                     time_t tt = time(NULL);
@@ -1750,17 +1778,20 @@ static void usage(const char *prog) {
     printf("  -h, --help             esta ayuda\n");
 
     printf("\n══ Configuración: %s ══\n", CONFIG_FILE);
-    printf("  Las ciudades y sus coordenadas se definen en el archivo %s\n", CONFIG_FILE);
-    printf("  (una por línea, formato  NOMBRE;lat,lon). Debe estar al lado\n");
-    printf("  de este programa ─o en el directorio actual─ para ser leído.\n");
+    printf("  Las ciudades, sus coordenadas y su región se definen en el\n");
+    printf("  archivo %s (una por línea, formato\n", CONFIG_FILE);
+    printf("  NOMBRE;lat,lon;REGION). Debe estar al lado de este programa\n");
+    printf("  ─o en el directorio actual─ para ser leído.\n");
 
     printf("\n  AÑADIR una ciudad nueva:\n");
     printf("   1) Obten sus coordenadas: en Google Maps haz clic derecho sobre\n");
     printf("      el sitio y copia el par \"lat,lon\" (p. ej. 46.49,11.36).\n");
     printf("   2) Añade una línea al final de %s con el formato\n", CONFIG_FILE);
-    printf("        NOMBRE;lat,lon\n");
-    printf("      p. ej.   BOLZANO;46.49,11.36\n");
+    printf("        NOMBRE;lat,lon;REGION\n");
+    printf("      p. ej.   BOLZANO;46.49,11.36;Trentino-Alto Adige\n");
     printf("      usa '.' como separador decimal (no coma): 46.49,11.36\n");
+    printf("      La REGION es opcional: si se omite, el programa mostrará\n");
+    printf("      solo la ciudad y las coordenadas.\n");
 
     printf("\n  QUITAR una ciudad:\n");
     printf("   borra su línea en %s para eliminarla por completo.\n", CONFIG_FILE);
@@ -1770,11 +1801,41 @@ static void usage(const char *prog) {
     printf("\n  CAMBIAR la ciudad por defecto:\n");
     printf("   la ciudad por defecto es la ÚNICA línea SIN '#'. Deja '#' a\n");
     printf("   las demás y solo una sin él:\n");
-    printf("        #TORINO;45.07,7.67\n");
-    printf("        MILANO;45.46,9.19        <- por defecto\n");
+    printf("        #TORINO;45.07,7.67;Piemonte\n");
+    printf("        MILANO;45.46,9.19;Lombardia        <- por defecto\n");
     printf("   Nota: la línea por defecto es la que se usa al ejecutar sin\n");
     printf("   '-c'. Ver también '%s -l' para ver lo cargado.\n\n", prog);
 }
+
+/* ------------------------------------------------------------------ */
+/* Tipografía de ancho fijo (solo aplicable en la consola de Windows)  */
+/* ------------------------------------------------------------------ */
+/* En Linux/macOS la fuente la elige el emulador de terminal (que por  */
+/* defecto es monoespaciada: Menlo en macOS, DejaVu Sans Mono etc.).   */
+/* En Windows la consola puede abrir con fuente variable: aquí se      */
+/* fuerza una fuente monoespaciada del sistema (Cascadia/Consolas).    */
+#ifdef _WIN32
+static void set_monospace_font(void) {
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    CONSOLE_FONT_INFOEX cf;
+    static const wchar_t *mono[] = {
+        L"Cascadia Mono", L"Consolas", L"Courier New"
+    };
+    DWORD n, i;
+    if (hOut == INVALID_HANDLE_VALUE) return;
+    memset(&cf, 0, sizeof(cf));
+    cf.cbSize = sizeof(cf);
+    if (!GetCurrentConsoleFontEx(hOut, FALSE, &cf)) return;
+    cf.dwFontSize.Y = 0;               /* mantener tamaño por defecto   */
+    cf.FontFamily = FF_MODERN;         /* familia de ancho fijo         */
+    cf.FontWeight = FW_NORMAL;
+    for (n = 0, i = 0; i < sizeof(mono) / sizeof(mono[0]); i++) {
+        wcscpy(cf.FaceName, mono[i]);
+        if (SetCurrentConsoleFontEx(hOut, FALSE, &cf)) { n = 1; break; }
+    }
+    (void)n;
+}
+#endif
 
 int main(int argc, char **argv) {
     const char *ciudad_default;
@@ -1789,6 +1850,7 @@ int main(int argc, char **argv) {
 
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
+    set_monospace_font();
 #endif
 
     /* Cargar ciudades y coord de clima.conf (o las 20 capitales si no hay) */

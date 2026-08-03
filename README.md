@@ -1,33 +1,34 @@
-# Analisis-de-Clima v2.1
+# Analisis-de-Clima v2.2
 
-Análisis del clima, tiempo y otros parámetros útiles para las capitales regionales de Italia, **en C** (compilable en Windows, Linux y macOS).
+Análisis del clima, tiempo y otros parámetros útiles para las capitales de región y de provincia de Italia, **en C** (compilable en Windows, Linux y macOS).
 
 > La versión en **Python** fue eliminada. Este proyecto mantiene **solo la versión en C**.
 
 ## Descripción
 
-Genera un pronóstico meteorológico completo para las capitales de región de Italia. Combina datos históricos observados, pronóstico de la API Open-Meteo y análisis estadístico para producir informes detallados.
+Genera un pronóstico meteorológico completo para las capitales de región y de provincia de Italia. Combina datos históricos observados, pronóstico de la API Open-Meteo y análisis estadístico para producir informes detallados.
 
 ## Configuración: `clima.conf`
 
-El archivo **`clima.conf`** define **las ciudades disponibles y sus coordenadas**, y cuál es la ciudad por defecto. El estilo es **`NOMBRE;lat,lon`** (una ciudad por línea):
+El archivo **`clima.conf`** define **las ciudades disponibles, sus coordenadas y su región**, y cuál es la ciudad por defecto. El estilo es **`NOMBRE;lat,lon;REGION`** (una ciudad por línea):
 
 ```ini
-#CAMPOBASSO;41.56,14.66
-#FIRENZE;43.77,11.26
-#MILANO;45.46,9.19
-TORINO;45.07,7.67
+#CAMPOBASSO;41.56,14.66;Molise
+#FIRENZE;43.77,11.26;Toscana
+#MILANO;45.46,9.19;Lombardia
+TORINO;45.07,7.67;Piemonte
 ```
 
 - La **única línea sin `#`** es la ciudad por defecto (aquí TORINO).
-- El programa, al ejecutarse, **lee la ciudad y sus coordenadas del archivo** y las usa para consultar a Open-Meteo.
+- El programa, al ejecutarse, **lee la ciudad, sus coordenadas y su región del archivo** y las usa para consultar a Open-Meteo.
 - **`--list` / `-l`** lista las ciudades definidas en el archivo.
-- **Para añadir una ciudad nueva**: agrega una línea `NOMBRE;lat,lon`, p. ej. `BOLZANO;46.49,11.36`.
+- **Para añadir una ciudad nueva**: agrega una línea `NOMBRE;lat,lon;REGION`, p. ej. `BOLZANO;46.49,11.36;Trentino-Alto Adige`.
+- **La región es opcional**: `NOMBRE;lat,lon` también es válido.
 - **Para cambiar la por defecto**: quita el `#` a la que quieras y comenta la actual (deja solo una línea sin `#`).
 
-Para las 20 capitales conocidas, el programa completa nombre visible, región, altitud y normales automáticamente. Para una ciudad nueva, solo aporta nombre y coordenadas.
+Para las 20 capitales conocidas, el programa completa nombre visible, altitud y normales automáticamente. Para una ciudad nueva, usa el nombre, coordenadas y región del propio archivo. El programa muestra conjuntamente **`Ciudad (Región, coordenadas)`** en sus reportes.
 
-El archivo se busca en el directorio actual y, si no está, junto al ejecutable (para que los binarios funcionen desde cualquier carpeta). Si no hay `clima.conf`, el programa usa por defecto TORINO con las 20 capitales.
+El archivo se busca en el directorio actual y, si no está, junto al ejecutable (para que los binarios funcionen desde cualquier carpeta). Si no hay `clima.conf`, el programa usa por defecto TORINO con las 20 capitales de región.
 
 ## Uso
 
@@ -118,7 +119,7 @@ Analisis-de-Clima/
 ├── forecast.c             # Código principal (C)
 ├── cJSON.c                # Parser JSON (incluido)
 ├── cJSON.h
-├── clima.conf             # Configuración: ciudades + coordenadas + por defecto
+├── clima.conf             # Configuración: ciudades + coordenadas + región + por defecto
 ├── .gitignore
 └── Binarios (no versionados, generados con make):
     forecast, forecast_macos, forecast.exe
@@ -128,7 +129,6 @@ Analisis-de-Clima/
 
 - **Open-Meteo API** — gratuita, sin API key requerida. Combina modelos ECMWF/GFS/ICON.
 - **Normales climáticas 1991-2020** — temperaturas medias y precipitación del mes para las 20 capitales conocidas.
-
 ## Proceso
 
 1. **Fetch** — consulta a Open-Meteo (datos horarios y diarios de los últimos 7 días + días solicitados), usando lat/lon desde `clima.conf`.
@@ -140,6 +140,16 @@ Analisis-de-Clima/
 7. **Detalle horario** — (opcional con `--extendido`) hora por hora.
 
 ## Salida
+
+La salida usa **tipografía de ancho fijo** para que las tablas queden alineadas:
+
+- **Windows**: el programa fuerza en la consola una fuente monoespaciada del sistema (`Cascadia Mono`, `Consolas` o `Courier New`), así la salida se ve bien incluso en la consola clásica de `cmd`.
+- **macOS**: el emulador de terminal ya usa por defecto una fuente de ancho fijo (**Menlo**), sin configurar nada.
+- **Linux**: los emuladores de terminal usan por defecto una fuente monoespaciada (p. ej. `DejaVu Sans Mono`), también sin configurar.
+
+El programa no puede cambiar la fuente dentro de un emulador de terminal (Linux/macOS); en Windows sí lo hace automáticamente.
+
+Contenido de la salida:
 
 1. Datos observados (histórico reciente)
 2. Tabla resumen de los próximos días
@@ -154,3 +164,4 @@ Analisis-de-Clima/
 - **v1.0** — Versión inicial (Python).
 - **v2.0** — Solo versión en C (multiplataforma: Windows/Linux/macOS); eliminada la versión Python y la app `app-macos/`; código movido a la raíz del proyecto; nuevo archivo de configuración **`clima.conf`** con formato `NOMBRE;lat,lon` que define la lista de ciudades, sus coordenadas y la ciudad por defecto (TORINO); `--list` lee del archivo y permite añadir ciudades nuevas; nuevo parámetro **`--version` / `-v`**.
 - **v2.1** — La ayuda (`-h` / `--help`) ahora incluye una sección **"Configuración: clima.conf"** con instrucciones para modificar el archivo (añadir o quitar ciudades y cómo obtener sus coordenadas para agregarlas). Limpieza del repositorio y ejecutables añadidos a `.gitignore`.
+- **v2.2** — `clima.conf` incluye las **110 capitales de provincia de Italia** con el nuevo formato **`NOMBRE;lat,lon;REGION`** (la región es opcional). El programa ahora muestra conjuntamente **`Ciudad (Región, coordenadas)`** en sus reportes, tomando la región del propio archivo. La salida usa **tipografía de ancho fijo**: en Windows el programa fuerza una fuente monoespaciada del sistema (Cascadia Mono/Consolas); en macOS y Linux la usa la del emulador de terminal (Menlo, DejaVu Sans Mono...).
