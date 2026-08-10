@@ -1,5 +1,5 @@
 /*
- * Pronóstico meteorológico para ciudades de Italia v2.2 (C)
+ * Pronóstico meteorológico para ciudades de Italia v2.3 (C)
  * Basado en: datos históricos observados + forecast Open-Meteo + análisis estadístico
  * Compila en Windows, Linux y macOS.
  *
@@ -44,7 +44,7 @@
 #define MAX_CITIES    160
 #define CONFIG_FILE   "clima.conf"
 #define CONF_LINE     160
-#define VERSIONA      "2.2"
+#define VERSIONA      "2.3"
 
 /* ------------------------------------------------------------------ */
 /* Metadatos de las 20 capitales (nombre visible, región, altitud,     */
@@ -116,6 +116,11 @@ typedef struct {
     double precip_prob;
     double precip;
     double pressure;
+    double apparent;
+    double wind_speed;
+    double wind_dir;
+    double wind_gust;
+    double uv;
     const char *condition;
     int  raw_code;
 } Hourly;
@@ -125,6 +130,11 @@ typedef struct {
     double t_max;
     double t_min;
     double precip_sum;
+    double uv_max;
+    double wind_max;
+    double wind_dir;
+    char sunrise[8];
+    char sunset[8];
     char dow[16];
 } ForecastDay;
 
@@ -541,6 +551,18 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *userdata) {
 }
 #endif
 
+/* Open-Meteo puede responder con HTTP 200 pero un cuerpo de error
+ * {"error":true,"reason":"..."}. Devuelve NULL si el JSON es un error.  */
+static const char *json_api_error(cJSON *json) {
+    cJSON *e, *r;
+    if (!json) return NULL;
+    e = cJSON_GetObjectItem(json, "error");
+    if (!cJSON_IsTrue(e)) return NULL;
+    r = cJSON_GetObjectItem(json, "reason");
+    if (cJSON_IsString(r) && r->valuestring) return r->valuestring;
+    return "Respuesta de error de Open-Meteo";
+}
+
 static void openmeteo_url(const Ciudad *c, int days_forecast,
                           int days_history, char *url, size_t n) {
     char start[16], end[16];
@@ -552,8 +574,8 @@ static void openmeteo_url(const Ciudad *c, int days_forecast,
         "?latitude=%.2f&longitude=%.2f"
         "&timezone=Europe/Rome"
         "&start_date=%s&end_date=%s"
-        "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max"
-        "&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,weather_code,surface_pressure"
+        "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,uv_index_max,wind_speed_10m_max,wind_direction_10m_dominant,sunrise,sunset"
+        "&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,weather_code,surface_pressure,apparent_temperature,wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index"
         "&models=best_match",
         c->lat, c->lon, start, end);
 }
@@ -563,107 +585,174 @@ static cJSON *fetch_openmeteo(const Ciudad *c, int days_forecast, int days_histo
     char url[URL_LEN];
     CURL *curl;
     CURLcode res;
+    long http_code = 0;
+    int attempt;
     MemBuf mem = {NULL, 0};
-    cJSON *json;
+    cJSON *json = NULL;
+    const char *api_err;
 
-    openmeteo_url(c, days_forecast, days_history, url, sizeof(url));
+    for (attempt = 1; attempt <= 2; attempt++) {
+        openmeteo_url(c, days_forecast, days_history, url, sizeof(url));
 
-    curl = curl_easy_init();
-    if (!curl) return NULL;
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &mem);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl = curl_easy_init();
+        if (!curl) return NULL;
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &mem);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, "Analisis-de-Clima/" VERSIONA);
 
-    res = curl_easy_perform(curl);
-    curl_easy_cleanup(curl);
+        res = curl_easy_perform(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        curl_easy_cleanup(curl);
 
-    if (res != CURLE_OK) {
-        fprintf(stderr, "  ERROR fetching data: %s\n", curl_easy_strerror(res));
-        free(mem.data);
+        if (res != CURLE_OK) {
+            fprintf(stderr, "  ERROR de red al obtener datos: %s\n", curl_easy_strerror(res));
+            free(mem.data);
+            mem.data = NULL;
+            mem.size = 0;
+            if (attempt == 1) { sleep(2); continue; }
+            return NULL;
+        }
+        if (http_code != 200) {
+            fprintf(stderr, "  ERROR: Open-Meteo respondió con HTTP %ld\n", http_code);
+            free(mem.data);
+            mem.data = NULL;
+            mem.size = 0;
+            if (attempt == 1) { sleep(2); continue; }
+            return NULL;
+        }
+        break;
+    }
+
+    json = cJSON_Parse(mem.data ? mem.data : "");
+    free(mem.data);
+    if (!json) {
+        fprintf(stderr, "  ERROR: no se pudo interpretar la respuesta JSON\n");
         return NULL;
     }
-    json = cJSON_Parse(mem.data);
-    free(mem.data);
+    api_err = json_api_error(json);
+    if (api_err) {
+        fprintf(stderr, "  ERROR de Open-Meteo: %s\n", api_err);
+        cJSON_Delete(json);
+        return NULL;
+    }
     return json;
 }
 #else /* _WIN32 */
 static cJSON *fetch_openmeteo(const Ciudad *c, int days_forecast, int days_history) {
     char url[URL_LEN];
-    char host[128], path[URL_LEN];
-    wchar_t whost[128], wpath[URL_LEN];
-    DWORD dwErr = 0;
-    HINTERNET hSession = NULL, hConnect = NULL, hRequest = NULL;
-    MemBuf mem = {NULL, 0};
-    cJSON *json = NULL;
+    int attempt;
 
-    openmeteo_url(c, days_forecast, days_history, url, sizeof(url));
+    for (attempt = 1; attempt <= 2; attempt++) {
+        char host[128], path[URL_LEN];
+        wchar_t whost[128], wpath[URL_LEN];
+        DWORD dwErr = 0;
+        HINTERNET hSession = NULL, hConnect = NULL, hRequest = NULL;
+        MemBuf mem = {NULL, 0};
+        cJSON *json = NULL;
+        const char *api_err;
 
-    {
-        const char *p = strstr(url, "://");
-        const char *slash;
-        p = p ? p + 3 : url;
-        slash = strchr(p, '/');
-        if (slash) {
-            snprintf(host, sizeof(host), "%.*s", (int)(slash - p), p);
-            snprintf(path, sizeof(path), "%s", slash);
-        } else {
-            snprintf(host, sizeof(host), "%s", p);
-            snprintf(path, sizeof(path), "/");
+        openmeteo_url(c, days_forecast, days_history, url, sizeof(url));
+        {
+            const char *p = strstr(url, "://");
+            const char *slash;
+            p = p ? p + 3 : url;
+            slash = strchr(p, '/');
+            if (slash) {
+                snprintf(host, sizeof(host), "%.*s", (int)(slash - p), p);
+                snprintf(path, sizeof(path), "%s", slash);
+            } else {
+                snprintf(host, sizeof(host), "%s", p);
+                snprintf(path, sizeof(path), "/");
+            }
         }
-    }
 
-    MultiByteToWideChar(CP_UTF8, 0, host, -1, whost, sizeof(whost) / sizeof(wchar_t));
-    MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, sizeof(wpath) / sizeof(wchar_t));
+        MultiByteToWideChar(CP_UTF8, 0, host, -1, whost, sizeof(whost) / sizeof(wchar_t));
+        MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, sizeof(wpath) / sizeof(wchar_t));
 
-    hSession = WinHttpOpen(L"Analisis-de-Clima/2.1",
-                           WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                           WINHTTP_NO_PROXY_NAME,
-                           WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!hSession) { dwErr = GetLastError(); goto done; }
+        {
+            wchar_t ua[64];
+            MultiByteToWideChar(CP_UTF8, 0, "Analisis-de-Clima/" VERSIONA, -1, ua, 64);
+            hSession = WinHttpOpen(ua,
+                                   WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                   WINHTTP_NO_PROXY_NAME,
+                                   WINHTTP_NO_PROXY_BYPASS, 0);
+        }
+        if (!hSession) { dwErr = GetLastError(); goto next; }
 
-    hConnect = WinHttpConnect(hSession, whost, INTERNET_DEFAULT_HTTPS_PORT, 0);
-    if (!hConnect) { dwErr = GetLastError(); goto done; }
+        hConnect = WinHttpConnect(hSession, whost, INTERNET_DEFAULT_HTTPS_PORT, 0);
+        if (!hConnect) { dwErr = GetLastError(); goto next; }
 
-    hRequest = WinHttpOpenRequest(hConnect, L"GET", wpath, NULL,
-                                  WINHTTP_NO_REFERER,
-                                  WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                  WINHTTP_FLAG_SECURE);
-    if (!hRequest) { dwErr = GetLastError(); goto done; }
+        hRequest = WinHttpOpenRequest(hConnect, L"GET", wpath, NULL,
+                                      WINHTTP_NO_REFERER,
+                                      WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                      WINHTTP_FLAG_SECURE);
+        if (!hRequest) { dwErr = GetLastError(); goto next; }
 
-    if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                            WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) {
-        dwErr = GetLastError();
-        goto done;
-    }
-    if (!WinHttpReceiveResponse(hRequest, NULL)) { dwErr = GetLastError(); goto done; }
+        if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                                WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) {
+            dwErr = GetLastError();
+            goto next;
+        }
+        if (!WinHttpReceiveResponse(hRequest, NULL)) { dwErr = GetLastError(); goto next; }
 
-    for (;;) {
-        DWORD avail = 0;
-        char chunk[8192];
-        DWORD read = 0;
-        if (!WinHttpQueryDataAvailable(hRequest, &avail)) { dwErr = GetLastError(); break; }
-        if (avail == 0) break;
-        if (avail > sizeof(chunk)) avail = sizeof(chunk);
-        if (!WinHttpReadData(hRequest, chunk, avail, &read)) { dwErr = GetLastError(); break; }
-        if (read == 0) break;
-        membuf_append(&mem, chunk, read);
-    }
+        {
+            DWORD status = 0;
+            DWORD status_len = sizeof(status);
+            if (WinHttpQueryHeaders(hRequest,
+                                    WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                                    WINHTTP_HEADER_NAME_BY_INDEX, &status, &status_len,
+                                    WINHTTP_NO_HEADER_INDEX) && status != 200) {
+                fprintf(stderr, "  ERROR: Open-Meteo respondió con HTTP %lu\n",
+                        (unsigned long)status);
+                dwErr = 0;
+                goto next;
+            }
+        }
 
-done:
-    if (hRequest) WinHttpCloseHandle(hRequest);
-    if (hConnect) WinHttpCloseHandle(hConnect);
-    if (hSession) WinHttpCloseHandle(hSession);
+        for (;;) {
+            DWORD avail = 0;
+            char chunk[8192];
+            DWORD read = 0;
+            if (!WinHttpQueryDataAvailable(hRequest, &avail)) { dwErr = GetLastError(); break; }
+            if (avail == 0) break;
+            if (avail > sizeof(chunk)) avail = sizeof(chunk);
+            if (!WinHttpReadData(hRequest, chunk, avail, &read)) { dwErr = GetLastError(); break; }
+            if (read == 0) break;
+            membuf_append(&mem, chunk, read);
+        }
 
-    if (mem.size == 0) {
-        fprintf(stderr, "  ERROR fetching data (WinHTTP error: %lu)\n", (unsigned long)dwErr);
+    next:
+        if (hRequest) WinHttpCloseHandle(hRequest);
+        if (hConnect) WinHttpCloseHandle(hConnect);
+        if (hSession) WinHttpCloseHandle(hSession);
+
+        if (mem.size == 0) {
+            if (dwErr != 0)
+                fprintf(stderr, "  ERROR de red al obtener datos (WinHTTP error: %lu)\n",
+                        (unsigned long)dwErr);
+            free(mem.data);
+            if (attempt == 1) { Sleep(2000); continue; }
+            return NULL;
+        }
+
+        json = cJSON_Parse(mem.data);
         free(mem.data);
-        return NULL;
+        if (!json) {
+            fprintf(stderr, "  ERROR: no se pudo interpretar la respuesta JSON\n");
+            return NULL;
+        }
+        api_err = json_api_error(json);
+        if (api_err) {
+            fprintf(stderr, "  ERROR de Open-Meteo: %s\n", api_err);
+            cJSON_Delete(json);
+            return NULL;
+        }
+        return json;
     }
-    json = cJSON_Parse(mem.data);
-    free(mem.data);
-    return json;
+    return NULL;
 }
 #endif /* _WIN32 */
 
@@ -699,6 +788,16 @@ static const char *condition_icon(const char *cond) {
     if (strstr(cond, "Tormenta"))             return "⛈";
     if (strstr(cond, "Nieve"))                return "❄";
     return "❓";
+}
+
+/* Convierte grados (0-360) en una abreviación de rosa de los vientos. */
+static const char *wind_dir_str(double dir) {
+    static const char *pts[] = {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                                "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
+    int idx;
+    if (dir < 0) return "?";
+    idx = (int)((dir + 11.25) / 22.5) % 16;
+    return pts[idx];
 }
 
 /* ------------------------------------------------------------------ */
@@ -871,6 +970,11 @@ static void build_forecast(cJSON *raw) {
         h->precip_prob = arr_num(cJSON_GetObjectItem(hourly, "precipitation_probability"), i);
         h->precip      = arr_num(cJSON_GetObjectItem(hourly, "precipitation"), i);
         h->pressure    = arr_num(cJSON_GetObjectItem(hourly, "surface_pressure"), i);
+        h->apparent    = arr_num(cJSON_GetObjectItem(hourly, "apparent_temperature"), i);
+        h->wind_speed  = arr_num(cJSON_GetObjectItem(hourly, "wind_speed_10m"), i);
+        h->wind_dir    = arr_num(cJSON_GetObjectItem(hourly, "wind_direction_10m"), i);
+        h->wind_gust   = arr_num(cJSON_GetObjectItem(hourly, "wind_gusts_10m"), i);
+        h->uv          = arr_num(cJSON_GetObjectItem(hourly, "uv_index"), i);
         h->raw_code    = (int)arr_num(cJSON_GetObjectItem(hourly, "weather_code"), i);
         h->condition   = weather_code_to_condition(h->raw_code);
     }
@@ -889,6 +993,17 @@ static void build_forecast(cJSON *raw) {
         fd->t_max = arr_num(cJSON_GetObjectItem(daily, "temperature_2m_max"), i);
         fd->t_min = arr_num(cJSON_GetObjectItem(daily, "temperature_2m_min"), i);
         fd->precip_sum = arr_num(cJSON_GetObjectItem(daily, "precipitation_sum"), i);
+        fd->uv_max = arr_num(cJSON_GetObjectItem(daily, "uv_index_max"), i);
+        fd->wind_max = arr_num(cJSON_GetObjectItem(daily, "wind_speed_10m_max"), i);
+        fd->wind_dir = arr_num(cJSON_GetObjectItem(daily, "wind_direction_10m_dominant"), i);
+        {
+            const char *sr = arr_str(cJSON_GetObjectItem(daily, "sunrise"), i);
+            const char *ss = arr_str(cJSON_GetObjectItem(daily, "sunset"), i);
+            if (sr && strlen(sr) >= 16) snprintf(fd->sunrise, sizeof(fd->sunrise), "%s", sr + 11);
+            else snprintf(fd->sunrise, sizeof(fd->sunrise), "--:--");
+            if (ss && strlen(ss) >= 16) snprintf(fd->sunset, sizeof(fd->sunset), "%s", ss + 11);
+            else snprintf(fd->sunset, sizeof(fd->sunset), "--:--");
+        }
         dow_name(d, fd->dow, sizeof(fd->dow));
         g_n_fdays++;
     }
@@ -1114,6 +1229,8 @@ static void today_report(const Ciudad *c) {
     double t_min = 1e9, t_max = -1e9, t_mean = 0, t_now = 0, h_now = 0, p_now = 0;
     double h_min = 1e9, h_max = -1e9, h_mean = 0;
     double p_min = 1e9, p_max = -1e9, p_mean = 0;
+    double a_now = 0, w_now = 0, w_dir_now = 0, w_max = -1e9, g_max = -1e9, uv_max = -1e9;
+    int w_max_h = 0, g_max_h = 0, uv_max_h = 0;
     int n_t = 0, n_p = 0, found = 0;
     int t_min_h = 0, t_max_h = 0, h_min_h = 0, h_max_h = 0, p_min_h = 0, p_max_h = 0;
     int any_rain = 0, night_storm = 0, day_storm = 0;
@@ -1157,6 +1274,9 @@ static void today_report(const Ciudad *c) {
             n_p++;
         }
         if (h->precip > 0) any_rain = 1;
+        if (h->wind_speed > w_max) { w_max = h->wind_speed; w_max_h = h->hour; }
+        if (h->wind_gust  > g_max) { g_max = h->wind_gust;  g_max_h = h->hour; }
+        if (h->uv         > uv_max) { uv_max = h->uv; uv_max_h = h->hour; }
         if (strstr(h->condition, "Tormenta")) {
             if (h->hour <= 5) night_storm = 1; else day_storm = 1;
         }
@@ -1192,6 +1312,7 @@ static void today_report(const Ciudad *c) {
             if (strcmp(h->date, today) != 0) continue;
             if (h->hour == now_h) {
                 t_now = h->temp; h_now = h->humid; p_now = h->pressure;
+                a_now = h->apparent; w_now = h->wind_speed; w_dir_now = h->wind_dir;
                 found_now = 1;
                 break;
             }
@@ -1201,6 +1322,7 @@ static void today_report(const Ciudad *c) {
                 const Hourly *h = &g_hourly[i];
                 if (strcmp(h->date, today) != 0) continue;
                 t_now = h->temp; h_now = h->humid; p_now = h->pressure;
+                a_now = h->apparent; w_now = h->wind_speed; w_dir_now = h->wind_dir;
                 break;
             }
         }
@@ -1252,33 +1374,39 @@ static void today_report(const Ciudad *c) {
     printf("  ── %s, %s %d %s %d ──\n", label, dow_short(dow), d, mon, y);
     printf("\n");
     {
-        char c1[32], c2[32], c3[32], c4[32], c5[32], c6[96];
+        char c1[32], c2[32], c3[32], c4[32], c5[32], c6[32], c7[32], c8[96];
         pad_left(c1, sizeof(c1), "Hora", 6);
         pad_left(c2, sizeof(c2), "Temp", 7);
         pad_left(c3, sizeof(c3), "Presión", 8);
         pad_left(c4, sizeof(c4), "Humedad", 7);
         pad_left(c5, sizeof(c5), "Lluvia", 7);
-        pad_left(c6, sizeof(c6), "Estado", 25);
-        printf("  %s  %s  %s  %s  %s  %s\n", c1, c2, c3, c4, c5, c6);
+        pad_left(c6, sizeof(c6), "Viento", 9);
+        pad_left(c7, sizeof(c7), "UV", 5);
+        pad_left(c8, sizeof(c8), "Estado", 25);
+        printf("  %s  %s  %s  %s  %s  %s  %s  %s\n", c1, c2, c3, c4, c5, c6, c7, c8);
         pad_left(c1, sizeof(c1), "──────", 6);
         pad_left(c2, sizeof(c2), "───────", 7);
         pad_left(c3, sizeof(c3), "────────", 8);
         pad_left(c4, sizeof(c4), "───────", 7);
         pad_left(c5, sizeof(c5), "───────", 7);
-        pad_left(c6, sizeof(c6), "─────────────────────────", 25);
-        printf("  %s  %s  %s  %s  %s  %s\n", c1, c2, c3, c4, c5, c6);
+        pad_left(c6, sizeof(c6), "─────────", 9);
+        pad_left(c7, sizeof(c7), "─────", 5);
+        pad_left(c8, sizeof(c8), "─────────────────────────", 25);
+        printf("  %s  %s  %s  %s  %s  %s  %s  %s\n", c1, c2, c3, c4, c5, c6, c7, c8);
     }
 
     for (i = 0; i < g_n_hourly; i++) {
         const Hourly *h = &g_hourly[i];
-        char pres[16], prec[16];
+        char pres[16], prec[16], wstr[16];
         if (strcmp(h->date, today) != 0) continue;
         if (h->pressure != 0) snprintf(pres, sizeof(pres), "%.0f hPa", h->pressure);
         else strcpy(pres, "N/A");
         if (h->precip > 0) snprintf(prec, sizeof(prec), "%.1fmm", h->precip);
         else strcpy(prec, "0.0mm");
-        printf("  %02d:00  %5.1f°C  %8s  %3.0f%%  %7s  %s %s\n",
-               h->hour, h->temp, pres, h->humid, prec,
+        if (h->wind_speed > 0) snprintf(wstr, sizeof(wstr), "%.0f %s", h->wind_speed, wind_dir_str(h->wind_dir));
+        else strcpy(wstr, "—");
+        printf("  %02d:00  %5.1f°C  %8s  %3.0f%%  %7s  %8s  %4.1f  %s %s\n",
+               h->hour, h->temp, pres, h->humid, prec, wstr, h->uv,
                condition_icon(h->condition), h->condition);
     }
 
@@ -1302,6 +1430,24 @@ static void today_report(const Ciudad *c) {
         printf("    Mínima:  %.0f hPa (%02d:00)\n", p_min, p_min_h);
         printf("    Media:   %.0f hPa\n", p_mean);
     }
+    if (a_now != 0)
+        printf("  Sensación térmica: %.1f°C (%02d:00)\n", a_now, now_h);
+    if (w_now > 0 || w_max > 0) {
+        printf("  Viento\n");
+        if (w_now > 0) printf("    Actual:  %.0f km/h %s (%02d:00)\n", w_now, wind_dir_str(w_dir_now), now_h);
+        printf("    Máxima:  %.0f km/h (%02d:00)\n", w_max, w_max_h);
+        if (g_max > 0) printf("    Ráfaga:  %.0f km/h (%02d:00)\n", g_max, g_max_h);
+    }
+    if (uv_max > 0) printf("  Índice UV máx.: %.0f (%02d:00)\n", uv_max, uv_max_h);
+    {
+        int d;
+        for (d = 0; d < g_n_fdays; d++) {
+            if (!strcmp(g_fdays[d].date, today)) {
+                printf("  Sol: salida %s, puesta %s\n", g_fdays[d].sunrise, g_fdays[d].sunset);
+                break;
+            }
+        }
+    }
     printf("  Estado dom.:  %s %s\n", condition_icon(dominant), dominant);
     printf("  Tendencia:    %s (%+.2f°C/h)\n", temp_trend, trend_slope);
     printf("  Normal julio: %.1f°C | Anomalía: %+.1f°C\n", c->t_mean, t_mean - c->t_mean);
@@ -1314,6 +1460,8 @@ static void today_report(const Ciudad *c) {
     else if (day_storm)   printf("  ⛈ Posibles tormentas durante el día\n");
     if (h_mean >= 70)     printf("  💧 Alta humedad: sensación de bochorno\n");
     if (t_max >= 37)      printf("  🔥 Calor extremo: evitar sol directo 11-17h\n");
+    if (uv_max >= 8)      printf("  🌞 Índice UV extremo: protector solar y sombrero\n");
+    else if (uv_max >= 6) printf("  🌞 Índice UV alto: protección solar recomendada\n");
     if (any_rain)         printf("  ☂ Lluvias previstas: llevar paraguas\n");
 
     {
@@ -1416,23 +1564,27 @@ static void run(const Ciudad *c, int days, int show_detail, int resumen) {
                          : "2. TABLA RESUMEN - PRÓXIMOS DÍAS");
 
     {
-        char h1[64], h2[64], h3[64], h4[64], h5[64], h6[32], h7[96];
+        char h1[64], h2[64], h3[64], h4[64], h5[64], h6[32], h7[32], h8[32], h9[96];
         pad_left(h1, sizeof(h1), "Día", 14);
         pad_left(h2, sizeof(h2), "T.Min (h)", 14);
         pad_left(h3, sizeof(h3), "T.Max (h)", 14);
         pad_left(h4, sizeof(h4), "H.min (h)", 14);
         pad_left(h5, sizeof(h5), "H.max (h)", 14);
         pad_left(h6, sizeof(h6), "Lluvia", 8);
-        pad_left(h7, sizeof(h7), "Condición", 30);
-        printf("  %s %s %s %s %s %s %s\n", h1, h2, h3, h4, h5, h6, h7);
+        pad_left(h7, sizeof(h7), "UV", 5);
+        pad_left(h8, sizeof(h8), "Viento", 12);
+        pad_left(h9, sizeof(h9), "Condición", 30);
+        printf("  %s %s %s %s %s %s %s %s %s\n", h1, h2, h3, h4, h5, h6, h7, h8, h9);
         pad_left(h1, sizeof(h1), "──────────────", 14);
         pad_left(h2, sizeof(h2), "──────────────", 14);
         pad_left(h3, sizeof(h3), "──────────────", 14);
         pad_left(h4, sizeof(h4), "──────────────", 14);
         pad_left(h5, sizeof(h5), "──────────────", 14);
         pad_left(h6, sizeof(h6), "────────", 8);
-        pad_left(h7, sizeof(h7), "──────────────────────────────", 30);
-        printf("  %s %s %s %s %s %s %s\n", h1, h2, h3, h4, h5, h6, h7);
+        pad_left(h7, sizeof(h7), "─────", 5);
+        pad_left(h8, sizeof(h8), "────────────", 12);
+        pad_left(h9, sizeof(h9), "──────────────────────────────", 30);
+        printf("  %s %s %s %s %s %s %s %s %s\n", h1, h2, h3, h4, h5, h6, h7, h8, h9);
     }
 
     g_n_stats = 0;
@@ -1451,10 +1603,11 @@ static void run(const Ciudad *c, int days, int show_detail, int resumen) {
             flag = ds->t_max >= 38 ? " 🔥" : "";
             printf("  %s %5.1f°C (%02d:00)  %5.1f°C (%02d:00)  "
                    "%3.0f%% (%02d:00)  %3.0f%% (%02d:00)  "
-                   "%6.2fmm  %s %s%s\n",
+                   "%6.2fmm  %4.1f  %3.0f %s  %s %s%s\n",
                    daylbl, ds->t_min, ds->t_min_hour, ds->t_max, ds->t_max_hour,
                    ds->h_min, ds->h_min_hour, ds->h_max, ds->h_max_hour,
-                   ds->precip, condition_icon(ds->condition), ds->condition, flag);
+                   ds->precip, fd->uv_max, fd->wind_max, wind_dir_str(fd->wind_dir),
+                   condition_icon(ds->condition), ds->condition, flag);
             g_n_stats++;
         }
     }
@@ -1715,9 +1868,11 @@ static void run(const Ciudad *c, int days, int show_detail, int resumen) {
         {
             char current_date[16] = "";
             int row_count = 0;
+            printf("  %-25s  %5s  %5s  %4s  %6s  %5s  %s %s\n",
+                   "Fecha/Hora", "Temp", "Sensac", "Hum", "Lluvia", "Viento", "UV", "Estado");
             for (i = 0; i < g_n_hourly; i++) {
                 const Hourly *h = &g_hourly[i];
-                char precip_str[16], week[16], mons[8];
+                char precip_str[16], week[16], mons[8], wstr[16];
                 int dy, mo, dd;
                 if (strcmp(h->date, today) < 0) continue;
                 if (row_count >= days * 24) break;
@@ -1738,9 +1893,14 @@ static void run(const Ciudad *c, int days, int show_detail, int resumen) {
                 else
                     strcpy(precip_str, "0.0");
 
-                printf("  %s  %5.1f°C  %3.0f%%  %5smm  %s %s\n",
-                       h->iso, h->temp, h->humid, precip_str,
-                       condition_icon(h->condition), h->condition);
+                if (h->wind_speed > 0)
+                    snprintf(wstr, sizeof(wstr), "%.0f %s", h->wind_speed, wind_dir_str(h->wind_dir));
+                else
+                    strcpy(wstr, "—");
+
+                printf("  %-25s  %5.1f°C  %5.1f°C  %3.0f%%  %5smm  %6s  %4.1f  %s %s\n",
+                       h->iso, h->temp, h->apparent, h->humid, precip_str, wstr,
+                       h->uv, condition_icon(h->condition), h->condition);
                 row_count++;
             }
             printf("\n  Total: %d registros horarios\n", row_count);

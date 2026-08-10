@@ -1,4 +1,4 @@
-# Analisis-de-Clima v2.2
+# Analisis-de-Clima v2.3
 
 Análisis del clima, tiempo y otros parámetros útiles para las capitales de región y de provincia de Italia, **en C** (compilable en Windows, Linux y macOS).
 
@@ -131,13 +131,13 @@ Analisis-de-Clima/
 - **Normales climáticas 1991-2020** — temperaturas medias y precipitación del mes para las 20 capitales conocidas.
 ## Proceso
 
-1. **Fetch** — consulta a Open-Meteo (datos horarios y diarios de los últimos 7 días + días solicitados), usando lat/lon desde `clima.conf`.
+1. **Fetch** — consulta a Open-Meteo (datos horarios y diarios de los últimos 7 días + días solicitados), usando lat/lon desde `clima.conf`. Incluye `apparent_temperature`, viento, ráfagas, dirección, índice UV y salida/puesta de sol.
 2. **Análisis histórico** — anomalías térmicas respecto a la normal, tendencia reciente, rachas secas y olas de calor.
-3. **Pronóstico diario** — tabla con temperaturas (mín/máx con hora), humedad, precipitación y condición dominante.
+3. **Pronóstico diario** — tabla con temperaturas (mín/máx con hora), humedad, precipitación, condición dominante, **índice UV** y **viento** (máx. del día con dirección).
 4. **Riesgo de mosquitos** — índice 0-10 (temperatura 45%, humedad 35%, precipitación 20%).
 5. **Tormentas convectivas** — detección por códigos WMO, con severidad y horario.
 6. **Resumen ejecutivo** — recomendaciones ante condiciones extremas.
-7. **Detalle horario** — (opcional con `--extendido`) hora por hora.
+7. **Detalle horario** — (opcional con `--extendido`) hora por hora con temperatura, sensación térmica, humedad, lluvia, viento y UV.
 
 ## Salida
 
@@ -152,12 +152,22 @@ El programa no puede cambiar la fuente dentro de un emulador de terminal (Linux/
 Contenido de la salida:
 
 1. Datos observados (histórico reciente)
-2. Tabla resumen de los próximos días
+2. Tabla resumen de los próximos días (con UV y viento)
 3. Análisis de anomalías y tendencia
 4. Índice de riesgo de mosquitos
 5. Análisis de tormentas convectivas
 6. Resumen ejecutivo con recomendaciones
-7. Predicción horaria detallada (opcional)
+7. Predicción horaria detallada (opcional; con sensación térmica, viento y UV)
+
+En `--today` y `--extendido` el programa incluye además: **sensación térmica** (apparent temperature), **viento** (velocidad, ráfagas y dirección), **salida y puesta de sol**, e **índice UV** (con avisos si es alto/extremo).
+
+## Robustez de red
+
+El programa verifica la respuesta de Open-Meteo antes de mostrar resultados:
+
+- **Código HTTP**: si la API responde con un error 4xx/5xx (p. ej. 429 «too many requests» o 400 por parámetros inválidos), se avisa y no se muestran datos vacíos.
+- **Errores JSON**: Open-Meteo puede devolver `{"error":true,"reason":"..."}` con HTTP 200; el programa lo detecta y muestra el motivo.
+- **Reintentos**: ante un fallo de red o un código HTTP erróneo se realiza un **segundo intento** (2 s de espera) antes de abortar.
 
 ## History
 
@@ -165,3 +175,4 @@ Contenido de la salida:
 - **v2.0** — Solo versión en C (multiplataforma: Windows/Linux/macOS); eliminada la versión Python y la app `app-macos/`; código movido a la raíz del proyecto; nuevo archivo de configuración **`clima.conf`** con formato `NOMBRE;lat,lon` que define la lista de ciudades, sus coordenadas y la ciudad por defecto (TORINO); `--list` lee del archivo y permite añadir ciudades nuevas; nuevo parámetro **`--version` / `-v`**.
 - **v2.1** — La ayuda (`-h` / `--help`) ahora incluye una sección **"Configuración: clima.conf"** con instrucciones para modificar el archivo (añadir o quitar ciudades y cómo obtener sus coordenadas para agregarlas). Limpieza del repositorio y ejecutables añadidos a `.gitignore`.
 - **v2.2** — `clima.conf` incluye las **110 capitales de provincia de Italia** con el nuevo formato **`NOMBRE;lat,lon;REGION`** (la región es opcional). El programa ahora muestra conjuntamente **`Ciudad (Región, coordenadas)`** en sus reportes, tomando la región del propio archivo. La salida usa **tipografía de ancho fijo**: en Windows el programa fuerza una fuente monoespaciada del sistema (Cascadia Mono/Consolas); en macOS y Linux la usa la del emulador de terminal (Menlo, DejaVu Sans Mono...).
+- **v2.3** — Nuevas métricas meteorológicas en todos los reportes: **viento** (velocidad, ráfagas y dirección, en `--today`, `-e` y la tabla resumen), **sensación térmica** (apparent temperature), **salida y puesta de sol** e **índice UV** (con aviso si es alto/extremo). **Robustez de red**: el programa ahora verifica el **código HTTP** de la respuesta de Open-Meteo y detecta los **errores JSON** (`{"error":true,...}`) evitando datos vacíos; **reintenta** automáticamente (2º intento tras 2 s) ante fallos de red o HTTP erróneo. Corrección del User-Agent de Windows (ahora anuncia la versión actual) y factorización del cliente HTTP para ambas plataformas.
