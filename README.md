@@ -1,4 +1,4 @@
-# Analisis-de-Clima v2.3
+# Analisis-de-Clima v2.4
 
 Análisis del clima, tiempo y otros parámetros útiles para las capitales de región y de provincia de Italia, **en C** (compilable en Windows, Linux y macOS).
 
@@ -128,7 +128,7 @@ Analisis-de-Clima/
 ## Fuentes de datos
 
 - **Open-Meteo API** — gratuita, sin API key requerida. Combina modelos ECMWF/GFS/ICON.
-- **Normales climáticas 1991-2020** — temperaturas medias y precipitación del mes para las 20 capitales conocidas.
+- **Normales climáticas medias anuales 1991-2020** — temperatura media y precipitación media diaria para las 20 capitales conocidas (usadas como referencia base para el cálculo de anomalías).
 ## Proceso
 
 1. **Fetch** — consulta a Open-Meteo (datos horarios y diarios de los últimos 7 días + días solicitados), usando lat/lon desde `clima.conf`. Incluye `apparent_temperature`, viento, ráfagas, dirección, índice UV y salida/puesta de sol.
@@ -176,3 +176,4 @@ El programa verifica la respuesta de Open-Meteo antes de mostrar resultados:
 - **v2.1** — La ayuda (`-h` / `--help`) ahora incluye una sección **"Configuración: clima.conf"** con instrucciones para modificar el archivo (añadir o quitar ciudades y cómo obtener sus coordenadas para agregarlas). Limpieza del repositorio y ejecutables añadidos a `.gitignore`.
 - **v2.2** — `clima.conf` incluye las **110 capitales de provincia de Italia** con el nuevo formato **`NOMBRE;lat,lon;REGION`** (la región es opcional). El programa ahora muestra conjuntamente **`Ciudad (Región, coordenadas)`** en sus reportes, tomando la región del propio archivo. La salida usa **tipografía de ancho fijo**: en Windows el programa fuerza una fuente monoespaciada del sistema (Cascadia Mono/Consolas); en macOS y Linux la usa la del emulador de terminal (Menlo, DejaVu Sans Mono...).
 - **v2.3** — Nuevas métricas meteorológicas en todos los reportes: **viento** (velocidad, ráfagas y dirección, en `--today`, `-e` y la tabla resumen), **sensación térmica** (apparent temperature), **salida y puesta de sol** e **índice UV** (con aviso si es alto/extremo). **Robustez de red**: el programa ahora verifica el **código HTTP** de la respuesta de Open-Meteo y detecta los **errores JSON** (`{"error":true,...}`) evitando datos vacíos; **reintenta** automáticamente (2º intento tras 2 s) ante fallos de red o HTTP erróneo. Corrección del User-Agent de Windows (ahora anuncia la versión actual) y factorización del cliente HTTP para ambas plataformas.
+- **v2.4** — Corrección de anomalías térmicas: las normales climáticas almacenadas en `METADATA` pasan de ser **medias de julio** a ser **medias anuales** (1991-2020), evitando comparaciones engañosas contra la temperatura del mes actual. Actualizadas las etiquetas `Normal julio` → `Normal climática` en todas las salidas y documentación.

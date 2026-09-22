@@ -1,5 +1,5 @@
 /*
- * Pronóstico meteorológico para ciudades de Italia v2.3 (C)
+ * Pronóstico meteorológico para ciudades de Italia v2.4 (C)
  * Basado en: datos históricos observados + forecast Open-Meteo + análisis estadístico
  * Compila en Windows, Linux y macOS.
  *
@@ -44,7 +44,7 @@
 #define MAX_CITIES    160
 #define CONFIG_FILE   "clima.conf"
 #define CONF_LINE     160
-#define VERSIONA      "2.3"
+#define VERSIONA      "2.4"
 
 /* ------------------------------------------------------------------ */
 /* Metadatos de las 20 capitales (nombre visible, región, altitud,
