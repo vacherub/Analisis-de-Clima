@@ -47,9 +47,9 @@
 #define VERSIONA      "2.3"
 
 /* ------------------------------------------------------------------ */
-/* Metadatos de las 20 capitales (nombre visible, región, altitud,     */
-/* normales julio 1991-2020). La lista de ciudades y sus coordenadas   */
-/* viene de clima.conf; aquí sólo se busca el nombre para enriquecerla.*/
+/* Metadatos de las 20 capitales (nombre visible, región, altitud,
+ * normales climáticas medias anuales 1991-2020). La lista de ciudades y sus coordenadas
+ * viene de clima.conf; aquí sólo se busca el nombre para enriquecerla.*/
 /* ------------------------------------------------------------------ */
 typedef struct {
     const char *key;          /* nombre en clima.conf (clave)          */
@@ -63,26 +63,26 @@ typedef struct {
 } MetaCiudad;
 
 static const MetaCiudad METADATA[] = {
-    {"ANCONA",    "Ancona",    "Marche",                 43.62, 13.52,  16, 24.0, 30},
-    {"AOSTA",     "Aosta",     "Valle d'Aosta",          45.74,  7.32, 583, 21.0, 45},
-    {"AQUILA",    "L'Aquila",  "Abruzzo",               42.35, 13.40, 714, 21.5, 35},
-    {"BARI",      "Bari",      "Puglia",                 41.12, 16.87,   5, 26.5, 20},
-    {"BOLOGNA",   "Bologna",   "Emilia-Romagna",         44.49, 11.34,  54, 25.0, 40},
-    {"CAGLIARI",  "Cagliari",  "Sardegna",               39.22,  9.12,   4, 26.5,  3},
-    {"CAMPOBASSO","Campobasso","Molise",                41.56, 14.66, 701, 22.5, 30},
-    {"CATANZARO", "Catanzaro", "Calabria",              38.91, 16.60, 342, 25.0, 10},
-    {"FIRENZE",   "Firenze",   "Toscana",               43.77, 11.26,  50, 25.0, 40},
-    {"GENOVA",    "Genova",    "Liguria",               44.41,  8.93,  19, 24.5, 30},
-    {"MILANO",    "Milano",    "Lombardia",             45.46,  9.19, 122, 24.0, 65},
-    {"NAPOLI",    "Napoli",    "Campania",              40.85, 14.27,  17, 26.0, 25},
-    {"PALERMO",   "Palermo",   "Sicilia",               38.12, 13.36,  14, 27.0,  5},
-    {"PERUGIA",   "Perugia",   "Umbria",                43.11, 12.39, 493, 24.0, 35},
-    {"POTENZA",   "Potenza",   "Basilicata",            40.64, 15.80, 819, 22.0, 25},
-    {"ROMA",      "Roma",      "Lazio",                41.90, 12.50,  21, 25.5, 20},
-    {"TORINO",    "Torino",    "Piemonte",             45.07,  7.67, 239, 23.2, 56},
-    {"TRENTO",    "Trento",    "Trentino-Alto Adige",   46.07, 11.12, 190, 22.5, 70},
-    {"TRIESTE",   "TRIESTE",   "Friuli-Venezia Giulia",  45.65, 13.77,   2, 24.5, 65},
-    {"VENEZIA",   "Venezia",   "Veneto",               45.44, 12.32,   1, 24.5, 50},
+{"ANCONA",    "Ancona",    "Marche",                 43.62, 13.52,  16, 15.0, 30},
+    {"AOSTA",     "Aosta",     "Valle d'Aosta",          45.74,  7.32, 583,  9.0, 45},
+    {"AQUILA",    "L'Aquila",  "Abruzzo",               42.35, 13.40, 714, 12.5, 35},
+    {"BARI",      "Bari",      "Puglia",                 41.12, 16.87,   5, 17.0, 20},
+    {"BOLOGNA",   "Bologna",   "Emilia-Romagna",         44.49, 11.34,  54, 14.5, 40},
+    {"CAGLIARI",  "Cagliari",  "Sardegna",               39.22,  9.12,   4, 17.0,  3},
+    {"CAMPOBASSO","Campobasso","Molise",                41.56, 14.66, 701, 13.5, 30},
+    {"CATANZARO", "Catanzaro", "Calabria",              38.91, 16.60, 342, 15.5, 10},
+    {"FIRENZE",   "Firenze",   "Toscana",               43.77, 11.26,  50, 14.5, 40},
+    {"GENOVA",    "Genova",    "Liguria",               44.41,  8.93,  19, 16.0, 30},
+    {"MILANO",    "Milano",    "Lombardia",             45.46,  9.19, 122, 14.0, 65},
+    {"NAPOLI",    "Napoli",    "Campania",              40.85, 14.27,  17, 17.0, 25},
+    {"PALERMO",   "Palermo",   "Sicilia",               38.12, 13.36,  14, 18.5,  5},
+    {"PERUGIA",   "Perugia",   "Umbria",                43.11, 12.39, 493, 13.5, 35},
+    {"POTENZA",   "Potenza",   "Basilicata",            40.64, 15.80, 819, 12.5, 25},
+    {"ROMA",      "Roma",      "Lazio",                 41.90, 12.50,  21, 16.0, 20},
+    {"TORINO",    "Torino",    "Piemonte",             45.07,  7.67, 239, 13.0, 56},
+    {"TRENTO",    "Trento",    "Trentino-Alto Adige",   46.07, 11.12, 190, 11.0, 70},
+    {"TRIESTE",   "TRIESTE",   "Friuli-Venezia Giulia",  45.65, 13.77,   2, 13.5, 65},
+    {"VENEZIA",   "Venezia",   "Veneto",                45.44, 12.32,   1, 14.0, 50},
 };
 #define N_METADATA ((int)(sizeof(METADATA) / sizeof(METADATA[0])))
 
@@ -1450,7 +1450,7 @@ static void today_report(const Ciudad *c) {
     }
     printf("  Estado dom.:  %s %s\n", condition_icon(dominant), dominant);
     printf("  Tendencia:    %s (%+.2f°C/h)\n", temp_trend, trend_slope);
-    printf("  Normal julio: %.1f°C | Anomalía: %+.1f°C\n", c->t_mean, t_mean - c->t_mean);
+    printf("  Normal climática: %.1f°C | Anomalía: %+.1f°C\n", c->t_mean, t_mean - c->t_mean);
 
     if (hist.heatwave) {
         if (any_rain) printf("  ⚠ OLA DE CALOR INTERRUMPIDA — lluvias en el día de hoy\n");
@@ -1501,8 +1501,8 @@ static void run(const Ciudad *c, int days, int show_detail, int resumen) {
                tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
                tm->tm_hour, tm->tm_min);
     }
-    printf("  Período: %d día(s) | Altitud: %dm | Normal julio: %.1f°C / %dmm\n",
-           days, c->alt, c->t_mean, c->precip);
+printf("  Período: %d día(s) | Altitud: %dm | Normal climática: %.1f°C / %dmm\n",
+               days, c->alt, c->t_mean, c->precip);
     printf("\n");
 
     raw = fetch_openmeteo(c, days, HIST_DAYS);
@@ -1620,7 +1620,7 @@ static void run(const Ciudad *c, int days, int show_detail, int resumen) {
 
         if (hist.n_days > 0) {
             printf("\n  Temperatura media observada (histórico): %.1f°C\n", hist.mean_obs);
-            printf("  Temperatura normal climática (julio):   %.1f°C\n", hist.mean_normal);
+            printf("  Temperatura normal climática (anual):   %.1f°C\n", hist.mean_normal);
             printf("  Anomalía:                              %+.1f°C\n", hist.mean_anomaly);
 
             if (hist.heatwave) {
@@ -1637,7 +1637,7 @@ static void run(const Ciudad *c, int days, int show_detail, int resumen) {
             else                                           printf("  Tendencia: ESTABLE\n");
         }
 
-        printf("\n  Anomalías proyectadas por día (normal julio: %.1f°C):\n", c->t_mean);
+        printf("\n  Anomalías proyectadas por día (normal climática: %.1f°C):\n", c->t_mean);
         {
             char h1[64], h2[32], h3[32], h4[32], h5[32];
             pad_left(h1, sizeof(h1), "Día", 14);
